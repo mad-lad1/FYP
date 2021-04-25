@@ -43,6 +43,7 @@ import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
 import org.tensorflow.lite.examples.detection.tracking.MultiBoxTracker;
 
+
 import tflite.Classifier;
 import tflite.Detector;
 import tflite.TFLiteObjectDetectionAPIModel;
@@ -63,15 +64,14 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   // Minimum detection confidence to track a detection.
   private static final float MINIMUM_CONFIDENCE_TF_OD_API = 0.5f;
   private static final boolean MAINTAIN_ASPECT = false;
-  private static final Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
+  private static final Size DESIRED_PREVIEW_SIZE = new Size(1280, 720);
   private static final boolean SAVE_PREVIEW_BITMAP = false;
   private static final float TEXT_SIZE_DIP = 10;
   OverlayView trackingOverlay;
-  private Integer sensorOrientation;
+  public static Integer sensorOrientation;
   private HandlerThread backgroundThread;
   private Handler backgroundHandler;
   private Detector detector;
-
 
 
   private long lastProcessingTimeMs;
@@ -87,17 +87,15 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private Matrix cropToFrameTransform;
 
   private MultiBoxTracker tracker;
-  private Classifier classifier;
-  private Bitmap depthRGBitmap = null;
 
-  /** Input image size of the model along x axis. */
+  /**
+   * Input image size of the model along x axis.
+   */
   private int imageSizeX;
-  /** Input image size of the model along y axis. */
+  /**
+   * Input image size of the model along y axis.
+   */
   private int imageSizeY;
-
-  private   float[] img_array_depth;
-  public static int[] image_normalized;
-
 
 
 
@@ -120,8 +118,8 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   @Override
   public void onPreviewSizeChosen(final Size size, final int rotation) {
     final float textSizePx =
-        TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP, TEXT_SIZE_DIP, getResources().getDisplayMetrics());
+            TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP, TEXT_SIZE_DIP, getResources().getDisplayMetrics());
     borderedText = new BorderedText(textSizePx);
     borderedText.setTypeface(Typeface.MONOSPACE);
 
@@ -131,19 +129,19 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     try {
       detector =
-          TFLiteObjectDetectionAPIModel.create(
-              this,
-              TF_OD_API_MODEL_FILE,
-              TF_OD_API_LABELS_FILE,
-              TF_OD_API_INPUT_SIZE,
-              TF_OD_API_IS_QUANTIZED);
+              TFLiteObjectDetectionAPIModel.create(
+                      this,
+                      TF_OD_API_MODEL_FILE,
+                      TF_OD_API_LABELS_FILE,
+                      TF_OD_API_INPUT_SIZE,
+                      TF_OD_API_IS_QUANTIZED);
       cropSize = TF_OD_API_INPUT_SIZE;
     } catch (final IOException e) {
       e.printStackTrace();
       LOGGER.e(e, "Exception initializing Detector!");
       Toast toast =
-          Toast.makeText(
-              getApplicationContext(), "Detector could not be initialized", Toast.LENGTH_SHORT);
+              Toast.makeText(
+                      getApplicationContext(), "Detector could not be initialized", Toast.LENGTH_SHORT);
       toast.show();
       finish();
     }
@@ -159,33 +157,26 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     croppedBitmap = Bitmap.createBitmap(cropSize, cropSize, Config.ARGB_8888);
 
 
-    recreateClassifier(getModel(), getDevice(), getNumThreads());
-    if (classifier == null) {
-      LOGGER.e("No classifier on preview!");
-      return;
-    }
-
-
     frameToCropTransform =
-        ImageUtils.getTransformationMatrix(
-            previewWidth, previewHeight,
-            cropSize, cropSize,
-            sensorOrientation, MAINTAIN_ASPECT);
+            ImageUtils.getTransformationMatrix(
+                    previewWidth, previewHeight,
+                    cropSize, cropSize,
+                    sensorOrientation, MAINTAIN_ASPECT);
 
     cropToFrameTransform = new Matrix();
     frameToCropTransform.invert(cropToFrameTransform);
 
     trackingOverlay = (OverlayView) findViewById(R.id.tracking_overlay);
     trackingOverlay.addCallback(
-        new DrawCallback() {
-          @Override
-          public void drawCallback(final Canvas canvas) {
-            tracker.draw(canvas);
-            if (isDebug()) {
-              tracker.drawDebug(canvas);
-            }
-          }
-        });
+            new DrawCallback() {
+              @Override
+              public void drawCallback(final Canvas canvas) {
+                tracker.draw(canvas);
+                if (isDebug()) {
+                  tracker.drawDebug(canvas);
+                }
+              }
+            });
 
     tracker.setFrameConfiguration(previewWidth, previewHeight, sensorOrientation);
     rgbFrameBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Config.ARGB_8888);
@@ -207,8 +198,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
     final int cropSize = Math.min(previewWidth, previewHeight);
-    Log.i("JOKER", "The preview width is: "+ previewWidth);
-
+    Log.i("JOKER", "The preview width is: " + previewWidth);
 
 
     readyForNextImage();
@@ -221,68 +211,55 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     }
 
     runInBackground(
-        new Runnable() {
-          @Override
-          public void run() {
-            LOGGER.i("Running detection on image " + currTimestamp);
-            final long startTime = SystemClock.uptimeMillis();
-            final List<Detector.Recognition> results = detector.recognizeImage(croppedBitmap);
-            lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
+            new Runnable() {
+              @Override
+              public void run() {
+                LOGGER.i("Running detection on image " + currTimestamp);
+                final long startTime = SystemClock.uptimeMillis();
+                final List<Detector.Recognition> results = detector.recognizeImage(croppedBitmap);
+                lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
 
-            cropCopyBitmap = Bitmap.createBitmap(croppedBitmap);
-            final Canvas canvas = new Canvas(cropCopyBitmap);
-            final Paint paint = new Paint();
-            paint.setColor(Color.RED);
-            paint.setStyle(Style.STROKE);
-            paint.setStrokeWidth(2.0f);
+                cropCopyBitmap = Bitmap.createBitmap(croppedBitmap);
+                final Canvas canvas = new Canvas(cropCopyBitmap);
+                final Paint paint = new Paint();
+                paint.setColor(Color.RED);
+                paint.setStyle(Style.STROKE);
+                paint.setStrokeWidth(2.0f);
 
-            float minimumConfidence = MINIMUM_CONFIDENCE_TF_OD_API;
-            switch (MODE) {
-              case TF_OD_API:
-                minimumConfidence = MINIMUM_CONFIDENCE_TF_OD_API;
-                break;
-            }
+                float minimumConfidence = MINIMUM_CONFIDENCE_TF_OD_API;
+                switch (MODE) {
+                  case TF_OD_API:
+                    minimumConfidence = MINIMUM_CONFIDENCE_TF_OD_API;
+                    break;
+                }
 
-            final List<Detector.Recognition> mappedRecognitions =
-                new ArrayList<Detector.Recognition>();
+                final List<Detector.Recognition> mappedRecognitions =
+                        new ArrayList<Detector.Recognition>();
 
-            for (final Detector.Recognition result : results) {
-              final RectF location = result.getLocation();
-              if (location != null && result.getConfidence() >= minimumConfidence) {
-                canvas.drawRect(location, paint);
+                for (final Detector.Recognition result : results) {
+                  final RectF location = result.getLocation();
+                  if (location != null && result.getConfidence() >= minimumConfidence) {
+                    canvas.drawRect(location, paint);
 
-                cropToFrameTransform.mapRect(location);
+                    cropToFrameTransform.mapRect(location);
 
-                result.setLocation(location);
-                mappedRecognitions.add(result);
-              }
-            }
-
-            tracker.trackResults(mappedRecognitions, currTimestamp);
-            trackingOverlay.postInvalidate();
-
-            computingDetection = false;
-
-
-            //Added for depth estimation
-            if(classifier != null){
-               img_array_depth = classifier.recognizeImage(rgbFrameBitmap, sensorOrientation);
-               image_normalized =  normalize_image(img_array_depth, imageSizeX, imageSizeY);
-            }
-
-
-
-            runOnUiThread(
-                new Runnable() {
-                  @Override
-                  public void run() {
-                    showFrameInfo(previewWidth + "x" + previewHeight);
-                    showCropInfo(cropCopyBitmap.getWidth() + "x" + cropCopyBitmap.getHeight());
-                    showInference(lastProcessingTimeMs + "ms");
+                    result.setLocation(location);
+                    mappedRecognitions.add(result);
                   }
-                });
-          }
-        });
+                }
+
+                tracker.trackResults(mappedRecognitions, currTimestamp);
+                trackingOverlay.postInvalidate();
+
+                computingDetection = false;
+
+
+
+
+
+
+              }
+            });
   }
 
   @Override
@@ -304,19 +281,18 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   @Override
   protected void setUseNNAPI(final boolean isChecked) {
     runInBackground(
-        () -> {
-          try {
-            detector.setUseNNAPI(isChecked);
-          } catch (UnsupportedOperationException e) {
-            LOGGER.e(e, "Failed to set \"Use NNAPI\".");
-            runOnUiThread(
-                () -> {
-                  Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
-                });
-          }
-        });
+            () -> {
+              try {
+                detector.setUseNNAPI(isChecked);
+              } catch (UnsupportedOperationException e) {
+                LOGGER.e(e, "Failed to set \"Use NNAPI\".");
+                runOnUiThread(
+                        () -> {
+                          Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+                        });
+              }
+            });
   }
-
 
 
   @Override
@@ -333,72 +309,25 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
   @Override
   protected void stopSegmentationBackground() {
-      backgroundThread.quitSafely();
-      try{
-        backgroundThread.join();
-        backgroundThread = null;
-        backgroundHandler = null;
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
+    backgroundThread.quitSafely();
+    try {
+      backgroundThread.join();
+      backgroundThread = null;
+      backgroundHandler = null;
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
   }
 
   @Override
   protected void setNumThreads(final int numThreads) {
     runInBackground(() -> detector.setNumThreads(numThreads));
   }
-
- private void recreateClassifier(Classifier.Model model, Classifier.Device device, int numThreads){
-   if (classifier != null) {
-     LOGGER.d("Closing classifier.");
-     classifier.close();
-     classifier = null;
-   }
-   if (device == Classifier.Device.GPU
-           && (model == Classifier.Model.QUANTIZED_MOBILENET || model == Classifier.Model.QUANTIZED_EFFICIENTNET)) {
-     LOGGER.d("Not creating classifier: GPU doesn't support quantized models.");
-     runOnUiThread(
-             () -> {
-               Toast.makeText(this, "GPU Error for quantized models", Toast.LENGTH_LONG).show();
-             });
-     return;
-   }
-   try {
-     LOGGER.d(
-             "Creating classifier (model=%s, device=%s, numThreads=%d)", model, device, numThreads);
-     classifier = Classifier.create(this, model, device, numThreads);
-   } catch (IOException | IllegalArgumentException e) {
-     LOGGER.e(e, "Failed to create classifier.");
-     runOnUiThread(
-             () -> {
-               Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
-             });
-     return;
-   }
-
-
-
-   // Updates the input image size.
-   imageSizeX = classifier.getImageSizeX();
-   imageSizeY = classifier.getImageSizeY();
- }
-
-  private int[] normalize_image(float[] img_array, int imageSizeX, int imageSizeY){
-          float maxval = Float.NEGATIVE_INFINITY;
-          float minval = Float.POSITIVE_INFINITY;
-          for (float cur : img_array) {
-            maxval = Math.max(maxval, cur);
-            minval = Math.min(minval, cur);
-          }
-          float multiplier = 0;
-          if ((maxval - minval) > 0) multiplier = 255 / (maxval - minval);
-
-          int[] img_normalized = new int[img_array.length];
-          for (int i = 0; i < img_array.length; ++i) {
-            float val = (float) (multiplier * (img_array[i] - minval));
-            img_normalized[i] = (int) val;
-          }
-          return img_normalized;
-  }
-
 }
+
+
+
+
+
+
+

@@ -35,7 +35,7 @@ public class ImageSegmenter {
         this.intValues = new int[0];
         this.outFrame = new int[0];
         this.tfliteOptions = new Interpreter.Options();
-        this.model = new Model("road_segmentation", 225, 225, 225, 225);
+        this.model = new Model("shufflenetv2_dpc_cityscapes_225x225", 225, 225, 225, 225);
         loadModel();
         Log.d(TAG, "Created a Tensorflow Lite Image Segmenter.");
 
@@ -147,7 +147,7 @@ public class ImageSegmenter {
 
 
         private final Integer[] colors;
-
+        private final Integer[] binaryColors;
 
         public Model(String path, int inputWidth, int inputHeight, int outputWidth, int outputHeight){
             this.path = path;
@@ -173,6 +173,30 @@ public class ImageSegmenter {
                     Color.rgb(0, 0, 230) ,
                     Color.rgb(119, 11, 32)
             };
+            this.binaryColors = new Integer[]{
+                    Color.rgb(255   , 0, 0) ,
+                    Color.rgb(0 , 0, 0) ,
+                    Color.rgb(0  ,0, 0   ) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0) ,
+                    Color.rgb(0  , 0, 0)
+
+            };
+
+
             this.inputHeight = inputHeight;
             this.inputWidth = inputWidth;
             this.outputHeight = outputHeight;
@@ -185,6 +209,11 @@ public class ImageSegmenter {
         public  Integer[] getCityscapesColors() {
             return colors;
         }
+
+        public Integer[] getBinaryColors() {
+            return binaryColors;
+        }
+
         public  String getPath(){
             return  this.path;
         }

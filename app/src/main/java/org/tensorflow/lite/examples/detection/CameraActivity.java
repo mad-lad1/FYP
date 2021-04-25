@@ -26,10 +26,12 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.location.LocationManager;
 import android.media.Image;
 import android.media.Image.Plane;
 import android.media.ImageReader;
 import android.media.ImageReader.OnImageAvailableListener;
+import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -38,6 +40,8 @@ import android.os.Trace;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
+
+import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
 import android.view.View;
@@ -49,11 +53,15 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import java.nio.ByteBuffer;
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
 
+import model.repositories.MasterConnection;
 import tflite.Classifier;
 
 
@@ -85,16 +93,20 @@ public abstract class CameraActivity extends AppCompatActivity
   private LinearLayout gestureLayout;
   private BottomSheetBehavior<LinearLayout> sheetBehavior;
 
-  protected TextView frameValueTextView, cropValueTextView, inferenceTimeTextView;
+  protected TextView frameValueTextView, cropValueTextView;
+  public static TextView inferenceTimeTextView;
   protected ImageView bottomSheetArrowImageView;
   private ImageView plusImageView, minusImageView;
   private SwitchCompat apiSwitchCompat;
   private TextView threadsTextView;
   private CameraConnectionFragment camera2Fragment;
-  private Classifier.Model model = Classifier.Model.FLOAT_EFFICIENTNET;
-  private Classifier.Device device = Classifier.Device.GPU;
+  public static TextView textView;
   private int numThreads;
-
+  public static MasterConnection masterConnection;
+  private Boolean isConnected = false;
+  private Speed speed;
+  public static float carSpeed = 0;
+  public static Bitmap segmentation;
   @Override
   protected void onCreate(final Bundle savedInstanceState) {
     LOGGER.d("onCreate " + this);
@@ -102,9 +114,9 @@ public abstract class CameraActivity extends AppCompatActivity
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
     setContentView(R.layout.tfe_od_activity_camera);
-    Toolbar toolbar = findViewById(R.id.toolbar);
-    setSupportActionBar(toolbar);
-    getSupportActionBar().setDisplayShowTitleEnabled(false);
+    //Toolbar toolbar = findViewById(R.id.toolbar);
+    //setSupportActionBar(toolbar);
+   // getSupportActionBar().setDisplayShowTitleEnabled(false);
 
     if (hasPermission()) {
       setFragment();
@@ -119,10 +131,24 @@ public abstract class CameraActivity extends AppCompatActivity
     bottomSheetLayout = findViewById(R.id.bottom_sheet_layout);
     gestureLayout = findViewById(R.id.gesture_layout);
     sheetBehavior = BottomSheetBehavior.from(bottomSheetLayout);
+
    // imageSegmenterOriginal = new ImageSegmenter(this);
     bottomSheetArrowImageView = findViewById(R.id.bottom_sheet_arrow);
 
+    masterConnection = new MasterConnection(this, this, "192.168.43.118", this);
+    masterConnection.establishMasterConnection();
 
+
+
+  //Added for speed calculation
+    speed = new Speed(this);
+    speed.setupLocationAndSpeed();
+    if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
+      ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+    }
+    else{
+      speed.requestUpdates();
+    }
 
 
 
@@ -351,6 +377,7 @@ public abstract class CameraActivity extends AppCompatActivity
     }
 
     super.onPause();
+    speed.timerRemoveCallbacks();
     stopSegmentationBackground();
   }
 
@@ -383,6 +410,13 @@ public abstract class CameraActivity extends AppCompatActivity
         requestPermission();
       }
     }
+    if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+      if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+        speed.requestUpdates();
+      }
+    }
+
+
   }
 
   private static boolean allPermissionsGranted(final int[] grantResults) {
@@ -569,7 +603,7 @@ public abstract class CameraActivity extends AppCompatActivity
     cropValueTextView.setText(cropInfo);
   }
 
-  protected void showInference(String inferenceTime) {
+  public static void showInference(String inferenceTime) {
     inferenceTimeTextView.setText(inferenceTime);
   }
 
@@ -578,7 +612,7 @@ public abstract class CameraActivity extends AppCompatActivity
  // }
 
   protected void segmentation() throws Throwable {
-    camera2Fragment.segmentFrame();
+   segmentation =  camera2Fragment.segmentFrame();
   }
 
   protected abstract void processImage();
@@ -596,9 +630,7 @@ public abstract class CameraActivity extends AppCompatActivity
   protected abstract void startSegmentationBackground();
   protected abstract void stopSegmentationBackground();
 
-  protected Classifier.Model getModel() {return model;}
 
-  protected Classifier.Device getDevice() { return device; }
 
   protected int getNumThreads() { return numThreads; }
 }

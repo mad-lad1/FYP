@@ -45,6 +45,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.LayoutInflater;
@@ -53,6 +54,7 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.IOException;
@@ -282,6 +284,8 @@ public class CameraConnectionFragment extends Fragment {
     }
   }
 
+
+
   @Override
   public View onCreateView(
       final LayoutInflater inflater, final ViewGroup container, final Bundle savedInstanceState) {
@@ -376,7 +380,8 @@ public class CameraConnectionFragment extends Fragment {
   /** Opens the camera specified by {@link CameraConnectionFragment#cameraId}. */
   private void openCamera(final int width, final int height) {
     setUpCameraOutputs();
-    configureTransform(width, height);
+   // configureTransform(width, height);
+    transformImage(width, height);
     final Activity activity = getActivity();
     final CameraManager manager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
     try {
@@ -390,6 +395,7 @@ public class CameraConnectionFragment extends Fragment {
       throw new RuntimeException("Interrupted while trying to lock camera opening.", e);
     }
   }
+
 
   /** Closes the current {@link CameraDevice}. */
   private void closeCamera() {
@@ -535,20 +541,55 @@ public class CameraConnectionFragment extends Fragment {
     }
     textureView.setTransform(matrix);
   }
+  private void transformImage(int width, int height) {
+    if(previewSize == null || textureView == null) {
+      return;
+    }
+    Matrix matrix = new Matrix();
 
-  public void  segmentFrame() throws Throwable {
+    int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
+    RectF textureRectF = new RectF(0, 0, width, height);
+    RectF previewRectF = new RectF(0, 0, previewSize.getHeight(), previewSize.getWidth());
+    float centerX = textureRectF.centerX();
+    float centerY = textureRectF.centerY();
+
+    if(rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
+      previewRectF.offset(centerX - previewRectF.centerX(),
+              centerY - previewRectF.centerY());
+      matrix.setRectToRect(textureRectF, previewRectF, Matrix.ScaleToFit.FILL);
+      float scale = Math.max((float)width / previewSize.getWidth(),
+              (float)height / previewSize.getHeight());
+      matrix.postScale(scale, scale, centerX, centerY);
+      matrix.postRotate(90 * (rotation - 2), centerX, centerY);
+    }
+    textureView.setTransform(matrix);
+  }
+
+
+
+
+
+
+  public Bitmap  segmentFrame() throws Throwable {
     long start =  System.currentTimeMillis();
     ImageSegmenter.Model model= imageSegmenter.getModel();
     Bitmap bitmap = textureView.getBitmap(model.getInputWidth(), model.getInputHeight());
     int[] segmentedImage = imageSegmenter.segmentFrame(bitmap);
+
     Bitmap bmp = Bitmap.createBitmap(model.getOutputWidth(), model.getOutputHeight(),
             Bitmap.Config.ARGB_8888);
-    Utils.segmentResultToBitmap(segmentedImage, model.getCityscapesColors(), bmp);
+    Utils.segmentResultToBitmap(segmentedImage, model.getBinaryColors(), bmp);
     Bitmap res = Utils.resizeBitmap(bmp, textureView.getWidth(), textureView.getHeight());
-    long end = System.currentTimeMillis();
-    segmenterOverlay.setImageBitmap(res);
 
+    long end = System.currentTimeMillis();
+
+    getActivity().runOnUiThread(() -> segmenterOverlay.setImageBitmap(res));
+
+
+
+    return  res;
   }
+
 
 
 
